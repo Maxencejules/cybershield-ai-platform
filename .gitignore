@@ -1,0 +1,43 @@
+cybershield-ai-platform
+# Create .gitignore in your project root
+cat > .gitignore << EOF
+# Virtual Environment
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Environment variables
+.env
+*.env
+
+# Data and models
+data/trained_models/*.pkl
+data/sample_logs/*.log
+*.db
+*.sqlite
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets
+config/secrets.json
+*.key
+*.pem
+EOF
