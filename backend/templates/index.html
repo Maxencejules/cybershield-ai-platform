@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card bg-primary text-white">
+            <div class="card-body">
+                <h5 class="card-title">Total Events</h5>
+                <h2 id="total-events">-</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-danger text-white">
+            <div class="card-body">
+                <h5 class="card-title">Threats Detected</h5>
+                <h2 id="threats-detected">-</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-success text-white">
+            <div class="card-body">
+                <h5 class="card-title">System Health</h5>
+                <h2 id="system-health">-</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-warning text-dark">
+            <div class="card-body">
+                <h5 class="card-title">Active Alerts</h5>
+                <h2 id="active-alerts">-</h2>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                Threat Distribution
+            </div>
+            <div class="card-body">
+                <canvas id="threatChart"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                Recent Activity
+            </div>
+            <ul class="list-group list-group-flush" id="recent-activity-list">
+                <li class="list-group-item">Loading...</li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}

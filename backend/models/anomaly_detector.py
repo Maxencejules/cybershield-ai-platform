@@ -386,8 +386,13 @@ class AnomalyDetector:
                 'response_time': np.random.normal(200, 50),
                 'status_code': np.random.choice([200, 201, 204, 301, 302], p=[0.7, 0.1, 0.1, 0.05, 0.05]),
                 'bytes_sent': np.random.normal(5000, 1000),
+                'bytes_received': np.random.normal(1000, 200),
                 'error_count': np.random.poisson(0.5),
-                'request_rate': np.random.normal(100, 20)
+                'request_rate': np.random.normal(100, 20),
+                'user_agent': 'Mozilla/5.0 ' * np.random.randint(1, 3),
+                'request_path': '/api/v1/' + 'x' * np.random.randint(5, 20),
+                'connection_count': np.random.randint(1, 10),
+                'is_authenticated': np.random.choice([True, False])
             }
             data.append(entry)
         return data
@@ -397,12 +402,18 @@ class AnomalyDetector:
         features = []
         for entry in data:
             if isinstance(entry, dict):
+                # Must match _extract_dict_features structure (10 features)
                 feature = [
                     entry.get('response_time', 0),
                     entry.get('status_code', 200),
                     entry.get('bytes_sent', 0),
+                    entry.get('bytes_received', 0),
                     entry.get('error_count', 0),
-                    entry.get('request_rate', 0)
+                    entry.get('request_rate', 0),
+                    len(entry.get('user_agent', '')),
+                    len(entry.get('request_path', '')),
+                    entry.get('connection_count', 0),
+                    1 if entry.get('is_authenticated', False) else 0
                 ]
                 features.append(feature)
         return np.array(features)

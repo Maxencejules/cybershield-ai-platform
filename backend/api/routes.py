@@ -7,32 +7,48 @@ from flask import Blueprint, request, jsonify
 import numpy as np
 from datetime import datetime, timedelta
 import json
+from flask_jwt_extended import jwt_required
+from models.db_models import Alert, LogEntry
+from extensions import db
 
 api_blueprint = Blueprint('api', __name__)
 
 @api_blueprint.route('/dashboard', methods=['GET'])
+@jwt_required()
 def get_dashboard_data():
     """Get dashboard overview data"""
     try:
-        # Generate mock dashboard data
+        total_alerts = Alert.query.count()
+        critical_alerts = Alert.query.filter_by(severity='critical').count()
+        high_alerts = Alert.query.filter_by(severity='high').count()
+
+        # Get recent alerts for activity
+        recent_alerts = Alert.query.order_by(Alert.timestamp.desc()).limit(10).all()
+        recent_activity = [{
+            'id': a.id,
+            'timestamp': a.timestamp.isoformat(),
+            'type': a.type,
+            'message': a.message,
+            'severity': a.severity
+        } for a in recent_alerts]
+
         data = {
             'timestamp': datetime.now().isoformat(),
             'overview': {
-                'total_events': np.random.randint(10000, 50000),
-                'threats_detected': np.random.randint(10, 100),
-                'threats_blocked': np.random.randint(5, 50),
-                'system_health': np.random.choice(['healthy', 'warning', 'critical'], p=[0.7, 0.2, 0.1])
+                'total_events': total_alerts,
+                'threats_detected': critical_alerts + high_alerts,
+                'threats_blocked': 0, # Placeholder
+                'system_health': 'healthy' if critical_alerts < 5 else 'warning'
             },
-            'recent_activity': generate_recent_activity(),
+            'recent_activity': recent_activity,
             'threat_distribution': {
-                'sql_injection': np.random.randint(5, 30),
-                'xss_attack': np.random.randint(3, 20),
-                'brute_force': np.random.randint(10, 40),
-                'ddos': np.random.randint(2, 15),
-                'malware': np.random.randint(1, 10)
+                'critical': critical_alerts,
+                'high': high_alerts,
+                'medium': Alert.query.filter_by(severity='medium').count(),
+                'low': Alert.query.filter_by(severity='low').count()
             },
-            'time_series': generate_time_series_data(),
-            'geographic_data': generate_geographic_data()
+            'time_series': generate_time_series_data(), # Still mock for now, hard to aggregate in sqlite efficiently without raw SQL
+            'geographic_data': generate_geographic_data() # Still mock
         }
 
         return jsonify({
@@ -46,6 +62,7 @@ def get_dashboard_data():
         }), 500
 
 @api_blueprint.route('/alerts', methods=['GET'])
+@jwt_required()
 def get_alerts():
     """Get security alerts"""
     try:
@@ -53,7 +70,22 @@ def get_alerts():
         per_page = request.args.get('per_page', 10, type=int)
         severity = request.args.get('severity', 'all')
 
-        alerts = generate_alerts(page, per_page, severity)
+        query = Alert.query
+        if severity != 'all':
+            query = query.filter_by(severity=severity)
+
+        pagination = query.order_by(Alert.timestamp.desc()).paginate(page=page, per_page=per_page, error_out=False)
+
+        alerts = [{
+            'id': a.id,
+            'timestamp': a.timestamp.isoformat(),
+            'type': a.type,
+            'severity': a.severity,
+            'message': a.message,
+            'details': a.details,
+            'source_ip': a.source_ip,
+            'status': a.status
+        } for a in pagination.items]
 
         return jsonify({
             'success': True,
@@ -61,7 +93,8 @@ def get_alerts():
             'pagination': {
                 'page': page,
                 'per_page': per_page,
-                'total': 100  # Mock total
+                'total': pagination.total,
+                'pages': pagination.pages
             }
         })
     except Exception as e:
