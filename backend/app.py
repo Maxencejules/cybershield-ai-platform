@@ -3,7 +3,7 @@ CyberShield AI Platform - Backend Server
 Main Flask application with API endpoints for threat detection and monitoring
 """
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template, redirect, url_for
 from flask_cors import CORS
 import numpy as np
 import pandas as pd
@@ -19,13 +19,25 @@ from models.threat_detector import ThreatDetector
 from models.anomaly_detector import AnomalyDetector
 from utils.log_parser import LogParser
 from api.routes import api_blueprint
+from extensions import db, jwt, bcrypt
+from models.db_models import User, LogEntry, Alert
+from api.auth import auth_blueprint
+
 # Initialize Flask app
 app = Flask(__name__)
 CORS(app)
 
 # Configuration
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'cybershield-secret-key-change-in-production')
+app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'jwt-secret-key-change-in-production')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///cybershield.db')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Initialize extensions
+db.init_app(app)
+jwt.init_app(app)
+bcrypt.init_app(app)
 
 # Initialize models
 threat_detector = ThreatDetector()
@@ -34,9 +46,18 @@ log_parser = LogParser()
 
 # Register API blueprint
 app.register_blueprint(api_blueprint, url_prefix='/api')
+app.register_blueprint(auth_blueprint, url_prefix='/api/auth')
 
 @app.route('/')
-def home():
+def index():
+    return render_template('index.html')
+
+@app.route('/login')
+def login_page():
+    return render_template('login.html')
+
+@app.route('/health')
+def health_check():
     """Health check endpoint"""
     return jsonify({
         'status': 'online',
@@ -52,6 +73,7 @@ def analyze_logs():
         data = request.json
         log_content = data.get('log_content', '')
         analysis_type = data.get('analysis_type', 'all')
+        source_ip = request.remote_addr
 
         # Parse logs
         parsed_logs = log_parser.parse(log_content)
@@ -67,15 +89,49 @@ def analyze_logs():
             threat_results = threat_detector.analyze(parsed_logs)
             results['threats'] = threat_results
 
+            # Save threats to database
+            if 'threats' in threat_results:
+                for threat in threat_results['threats']:
+                    new_alert = Alert(
+                        type=threat['type'],
+                        severity=threat['severity'],
+                        message=f"Detected {threat['type']} in logs",
+                        details=threat,
+                        source_ip=source_ip
+                    )
+                    db.session.add(new_alert)
+
         # Perform anomaly detection
         if analysis_type in ['all', 'anomalies']:
             anomaly_results = anomaly_detector.detect(parsed_logs)
             results['anomalies'] = anomaly_results
 
+            # Save anomalies to database
+            if 'anomalies' in anomaly_results:
+                for anomaly in anomaly_results['anomalies']:
+                    new_alert = Alert(
+                        type=anomaly['type'],
+                        severity=anomaly['severity'],
+                        message=anomaly['description'],
+                        details=anomaly,
+                        source_ip=source_ip
+                    )
+                    db.session.add(new_alert)
+
         # Calculate risk score
         risk_score = calculate_risk_score(results)
         results['risk_score'] = risk_score
         results['risk_level'] = get_risk_level(risk_score)
+
+        # Save log entry
+        new_log = LogEntry(
+            log_content=log_content[:5000], # Truncate if too long
+            source_ip=source_ip,
+            severity=results['risk_level'],
+            parsed_data=results
+        )
+        db.session.add(new_log)
+        db.session.commit()
 
         return jsonify({
             'success': True,
@@ -83,6 +139,7 @@ def analyze_logs():
         })
 
     except Exception as e:
+        db.session.rollback()
         return jsonify({
             'success': False,
             'error': str(e)
@@ -271,6 +328,10 @@ if __name__ == '__main__':
     # Create necessary directories
     os.makedirs('data/sample_logs', exist_ok=True)
     os.makedirs('data/trained_models', exist_ok=True)
+
+    # Initialize database tables
+    with app.app_context():
+        db.create_all()
 
     # Run the Flask app
     app.run(debug=True, host='0.0.0.0', port=5000)
